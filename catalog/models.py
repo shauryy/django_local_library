@@ -1,44 +1,9 @@
 from django.db import models
 from django.urls import reverse
-
-class MyModelName(models.Model):
-    """A typical class defining a model, derived from the Model class."""
-
-    # Fields
-    my_field_name = models.CharField(max_length=20, help_text='Enter field documentation')
-    # …
-
-    # Metadata
-    class Meta:
-        ordering = ['-my_field_name']
-
-    # Methods
-    def get_absolute_url(self):
-        """Returns the URL to access a particular instance of MyModelName."""
-        return reverse('model-detail-view', args=[str(self.id)])
-
-    def __str__(self):
-        """String for representing the MyModelName object (in Admin site etc.)."""
-        return self.my_field_name
-
-# Create a new record using the model's constructor.
-record = MyModelName(my_field_name="Instance #1")
-
-# Save the object into the database.
-record.save()
-
-# Access model field values using Python attributes.
-print(record.id) # should return 1 for the first record.
-print(record.my_field_name) # should print 'Instance #1'
-
-# Change record by modifying the fields, then calling save().
-record.my_field_name = "New Instance Name"
-record.save()
-
-from django.urls import reverse # Used in get_absolute_url() to get URL for specified ID
-
-from django.db.models import UniqueConstraint # Constrains fields to unique values
-from django.db.models.functions import Lower # Returns lower cased value of field
+from django.db.models import UniqueConstraint
+from django.db.models.functions import Lower
+from django.conf import settings
+from datetime import date
 
 class Genre(models.Model):
     """Model representing a book genre."""
@@ -91,6 +56,13 @@ class Book(models.Model):
     def get_absolute_url(self):
         """Returns the URL to access a detail record for this book."""
         return reverse('book-detail', args=[str(self.id)])
+    
+    def display_genre(self):
+        """Create a string for the Genre. This is required to display genre in Admin."""
+        return ', '.join(genre.name for genre in self.genre.all()[:3])
+
+    display_genre.short_description = 'Genre'
+
 import uuid # Required for unique book instances
 
 class BookInstance(models.Model):
@@ -101,6 +73,7 @@ class BookInstance(models.Model):
     book = models.ForeignKey('Book', on_delete=models.RESTRICT, null=True)
     imprint = models.CharField(max_length=200)
     due_back = models.DateField(null=True, blank=True)
+    borrower = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
 
     LOAN_STATUS = (
         ('m', 'Maintenance'),
@@ -119,9 +92,17 @@ class BookInstance(models.Model):
 
     class Meta:
         ordering = ['due_back']
+        permissions = (("can_mark_returned", "Set book as returned"),)
+
 
     def __str__(self):
         """String for representing the Model object."""
+
+    @property
+    def is_overdue(self):
+        """Determines if the book is overdue based on due date and current date."""
+        return bool(self.due_back and date.today() > self.due_back)
+
         return f'{self.id} ({self.book.title})'
 class Author(models.Model):
     """Model representing an author."""
@@ -140,8 +121,26 @@ class Author(models.Model):
     def __str__(self):
         """String for representing the Model object."""
         return f'{self.last_name}, {self.first_name}'
-all_books = Book.objects.all()
-wild_books = Book.objects.filter(title__contains='wild')
-number_wild_books = wild_books.count()
-# Will match on: Fiction, Science fiction, non-fiction etc.
-books_containing_genre = Book.objects.filter(genre__name__icontains='fiction')
+class Language(models.Model):
+    """Model representing a Language (e.g. English, French, Japanese, etc.)"""
+    name = models.CharField(max_length=200,
+                            unique=True,
+                            help_text="Enter the book's natural language (e.g. English, French, Japanese etc.)")
+
+    def get_absolute_url(self):
+        """Returns the url to access a particular language instance."""
+        return reverse('language-detail', args=[str(self.id)])
+
+    def __str__(self):
+        """String for representing the Model object (in Admin site etc.)"""
+        return self.name
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                Lower('name'),
+                name='language_name_case_insensitive_unique',
+                violation_error_message = "Language already exists (case insensitive match)"
+                
+            ),
+        ]
