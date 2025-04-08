@@ -5,6 +5,14 @@ import dj_database_url
 from django.core.management.utils import get_random_secret_key
 import urllib.parse
 
+from pathlib import Path
+import environ
+BASE_DIR = Path(__file__).resolve().parent.parent
+env = environ.Env()
+# Load environment variables
+env.read_env(str(BASE_DIR / ".env"))
+
+
 # Base Directory
 BASE_DIR = Path(__file__).resolve().parent.parent
 
